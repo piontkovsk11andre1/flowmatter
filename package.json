@@ -1,0 +1,42 @@
+{
+  "name": "@p10i/frontmatter",
+  "version": "0.1.0",
+  "description": "Generate flowjob maps and linked HTML pages from Markdown frontmatter.",
+  "type": "module",
+  "exports": "./src/index.mjs",
+  "bin": {
+    "frontmatter": "bin/frontmatter.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage"
+  },
+  "keywords": [
+    "flowjob",
+    "frontmatter",
+    "markdown",
+    "diagram"
+  ],
+  "author": "Andrei Piontkovskii",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/piontkovsk11andre1/flowmatter.git"
+  },
+  "dependencies": {
+    "@p10i/flowjob": "0.1.2",
+    "glob": "13.0.6",
+    "glob-parent": "6.0.2",
+    "gray-matter": "4.0.3",
+    "marked": "18.0.7"
+  }
+}
