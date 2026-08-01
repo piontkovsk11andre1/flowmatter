@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/piontkovsk11andre1/flowmatter/schema/frontmatter.schema.json",
+  "title": "Flowmatter Markdown frontmatter",
+  "description": "Frontmatter fields supported by one Flowmatter Markdown document.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Stable document ID. Defaults to the relative Markdown path without its extension."
+    },
+    "title": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Display title. Defaults to the first level-one heading, then the filename."
+    },
+    "module": {
+      "description": "Parent flowjob module. A string is shorthand for a named module with a slug-derived ID.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "pattern": "\\S" },
+            "name": { "type": "string", "pattern": "\\S" },
+            "type": { "type": "string", "pattern": "\\S" }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "relations": {
+      "type": "array",
+      "description": "Directed relations from this document to documents selected by ID.",
+      "items": {
+        "type": "object",
+        "required": ["to", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "\\S",
+            "description": "Stable relation ID. Defaults to <document-id>:<one-based-index>."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "\\S",
+            "description": "Target document ID."
+          },
+          "type": {
+            "type": "string",
+            "pattern": "\\S",
+            "description": "Flow label."
+          },
+          "relationType": {
+            "type": "string",
+            "pattern": "\\S",
+            "description": "Optional flowjob relation styling/filter key."
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

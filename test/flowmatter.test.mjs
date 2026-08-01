@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { buildSite, FlowmatterError } from "../src/index.mjs";
+import { buildSite, FlowmatterError, validateSite } from "../src/index.mjs";
 
 const execFileAsync = promisify(execFile);
 const cliPath = path.resolve("bin/flowmatter.mjs");
@@ -149,4 +149,84 @@ test("builds through the CLI", async () => {
   assert.equal(stderr, "");
   assert.match(stdout, /Generated 1 page and .*site[\\/]flow\.html/);
   assert.match(await readFile(path.join(cwd, "site/page.html"), "utf8"), /CLI page/);
+});
+
+test("prints the bundled schema and multi-file example as JSON", async () => {
+  const schemaResult = await execFileAsync(process.execPath, [cliPath, "schema"]);
+  const exampleResult = await execFileAsync(process.execPath, [cliPath, "example"]);
+  const schema = JSON.parse(schemaResult.stdout);
+  const example = JSON.parse(exampleResult.stdout);
+
+  assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
+  assert.deepEqual(schema.properties.relations.items.required, ["to", "type"]);
+  assert.equal(Object.keys(example.files).length, 2);
+  assert.match(example.files["orders/place.md"], /to: capture-payment/);
+});
+
+test("prints the bundled Agent Skill without decoration", async () => {
+  const result = await execFileAsync(process.execPath, [cliPath, "skill"]);
+
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /^---\nname: flowmatter\n/);
+  assert.match(result.stdout, /flowmatter validate <folder-or-glob> --json/);
+  assert.match(result.stdout, /flowmatter build <folder-or-glob>/);
+});
+
+test("validates through the library without writing output", async () => {
+  const cwd = await workspace();
+  await put(cwd, "docs/page.md", "# Valid page\n");
+
+  const validation = await validateSite({ input: "docs", cwd });
+
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+  assert.deepEqual(validation.stats, { files: 1, modules: 1, relations: 0 });
+  await assert.rejects(readFile(path.join(cwd, "flowmatter-dist/flow.html"), "utf8"), /ENOENT/);
+});
+
+test("prints structured JSON diagnostics for invalid input", async () => {
+  const cwd = await workspace();
+  await put(cwd, "docs/source.md", `---
+relations:
+  - to: absent
+    type: call
+---
+Source
+`);
+
+  const result = spawnSync(process.execPath, [cliPath, "validate", "docs", "--json"], {
+    cwd,
+    encoding: "utf8",
+  });
+  const validation = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "");
+  assert.deepEqual(validation, {
+    valid: false,
+    errors: [{
+      code: "missing_relation_target",
+      path: "source.md",
+      message: 'source.md: relation target "absent" does not exist',
+    }],
+    warnings: [],
+    stats: null,
+  });
+});
+
+test("supports explicit build with a JSON result", async () => {
+  const cwd = await workspace();
+  await put(cwd, "docs/page.md", "# Explicit build\n");
+
+  const { stdout, stderr } = await execFileAsync(
+    process.execPath,
+    [cliPath, "build", "docs", "--output", "site", "--json"],
+    { cwd },
+  );
+  const result = JSON.parse(stdout);
+
+  assert.equal(stderr, "");
+  assert.equal(result.ok, true);
+  assert.equal(result.pageCount, 1);
+  assert.equal(result.flowPath, path.join(cwd, "site/flow.html"));
 });

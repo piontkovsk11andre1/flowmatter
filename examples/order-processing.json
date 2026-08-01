@@ -1,0 +1,6 @@
+{
+  "files": {
+    "orders/place.md": "---\nid: place-order\ntitle: Place order\nmodule:\n  id: orders\n  name: Orders\n  type: application\nrelations:\n  - id: capture-call\n    to: capture-payment\n    type: capturePayment()\n    relationType: call\n---\n\n# Place order\n\nValidate the order and request payment.\n",
+    "payments/capture.md": "---\nid: capture-payment\ntitle: Capture payment\nmodule:\n  id: payments\n  name: Payments\n  type: integration\n---\n\n# Capture payment\n\nAuthorize and capture the payment.\n"
+  }
+}

@@ -1,15 +1,23 @@
 {
   "name": "@p10i/flowmatter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Generate flowjob maps and linked HTML pages from Markdown frontmatter.",
   "type": "module",
-  "exports": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./schema/frontmatter.schema.json": "./schema/frontmatter.schema.json",
+    "./examples/order-processing.json": "./examples/order-processing.json",
+    "./skills/flowmatter/SKILL.md": "./skills/flowmatter/SKILL.md"
+  },
   "bin": {
     "flowmatter": "bin/flowmatter.mjs"
   },
   "files": [
     "bin/",
     "src/",
+    "schema/",
+    "examples/",
+    "skills/",
     "README.md",
     "LICENSE"
   ],
