@@ -1,6 +1,6 @@
-# frontmatter
+# flowmatter
 
-`frontmatter` turns a folder or glob of Markdown files into one interactive
+`flowmatter` turns a folder or glob of Markdown files into one interactive
 [flowjob](https://github.com/piontkovsk11andre1/flowjob) map and a mirrored tree
 of linked, standalone HTML pages.
 
@@ -11,7 +11,7 @@ of linked, standalone HTML pages.
 ## Install
 
 ```sh
-npm install @p10i/frontmatter
+npm install @p10i/flowmatter
 ```
 
 ## Markdown schema
@@ -64,24 +64,24 @@ module: Orders
 Build every Markdown file under a directory:
 
 ```sh
-frontmatter docs --output site
+flowmatter docs --output site
 ```
 
 Build a glob relative to the current directory:
 
 ```sh
-frontmatter "docs/**/*.md" --output site --title "Order processing"
+flowmatter "docs/**/*.md" --output site --title "Order processing"
 ```
 
-The default output directory is `frontmatter-dist`. It contains `flow.html`
+The default output directory is `flowmatter-dist`. It contains `flow.html`
 and one `.html` page per source file with the same relative path. Existing
 generated files are not overwritten unless `--force` is passed.
 
 ```text
-Usage: frontmatter <folder-or-glob> [options]
+Usage: flowmatter <folder-or-glob> [options]
 
 Options:
-  -o, --output <directory>  Output directory (default: frontmatter-dist)
+  -o, --output <directory>  Output directory (default: flowmatter-dist)
   --flow <filename>         Flow HTML filename (default: flow.html)
   --title <title>           Override the flow title
   -f, --force               Overwrite generated files
@@ -96,7 +96,7 @@ build with a nonzero exit code.
 ## Library
 
 ```js
-import { buildSite } from "@p10i/frontmatter";
+import { buildSite } from "@p10i/flowmatter";
 
 const result = await buildSite({
   input: "docs/**/*.md",

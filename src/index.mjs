@@ -31,10 +31,10 @@ article code { font-family: "SFMono-Regular", Consolas, monospace; }
 }
 `;
 
-export class FrontmatterError extends Error {
+export class FlowmatterError extends Error {
   constructor(message) {
     super(message);
-    this.name = "FrontmatterError";
+    this.name = "FlowmatterError";
   }
 }
 
@@ -75,16 +75,16 @@ function describeModule(value, relativePath) {
     return { id: slugify(value), name: value.trim() };
   }
   if (!isObject(value)) {
-    throw new FrontmatterError(`${relativePath}: "module" must be a string or object`);
+    throw new FlowmatterError(`${relativePath}: "module" must be a string or object`);
   }
 
   const id = value.id ?? (isNonEmptyString(value.name) ? slugify(value.name) : fallbackId);
   const name = value.name ?? (isNonEmptyString(value.id) ? value.id : fallbackName);
   if (!isNonEmptyString(id) || !isNonEmptyString(name)) {
-    throw new FrontmatterError(`${relativePath}: module "id" and "name" must be non-empty strings`);
+    throw new FlowmatterError(`${relativePath}: module "id" and "name" must be non-empty strings`);
   }
   if (value.type !== undefined && !isNonEmptyString(value.type)) {
-    throw new FrontmatterError(`${relativePath}: module "type" must be a non-empty string`);
+    throw new FlowmatterError(`${relativePath}: module "type" must be a non-empty string`);
   }
   return { id: id.trim(), name: name.trim(), ...(value.type ? { type: value.type.trim() } : {}) };
 }
@@ -92,19 +92,19 @@ function describeModule(value, relativePath) {
 function parseRelations(value, relativePath) {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
-    throw new FrontmatterError(`${relativePath}: "relations" must be an array`);
+    throw new FlowmatterError(`${relativePath}: "relations" must be an array`);
   }
 
   return value.map((relation, index) => {
     const location = `${relativePath}: relations[${index}]`;
-    if (!isObject(relation)) throw new FrontmatterError(`${location} must be an object`);
-    if (!isNonEmptyString(relation.to)) throw new FrontmatterError(`${location}.to must be a non-empty string`);
-    if (!isNonEmptyString(relation.type)) throw new FrontmatterError(`${location}.type must be a non-empty string`);
+    if (!isObject(relation)) throw new FlowmatterError(`${location} must be an object`);
+    if (!isNonEmptyString(relation.to)) throw new FlowmatterError(`${location}.to must be a non-empty string`);
+    if (!isNonEmptyString(relation.type)) throw new FlowmatterError(`${location}.type must be a non-empty string`);
     if (relation.id !== undefined && !isNonEmptyString(relation.id)) {
-      throw new FrontmatterError(`${location}.id must be a non-empty string`);
+      throw new FlowmatterError(`${location}.id must be a non-empty string`);
     }
     if (relation.relationType !== undefined && !isNonEmptyString(relation.relationType)) {
-      throw new FrontmatterError(`${location}.relationType must be a non-empty string`);
+      throw new FlowmatterError(`${location}.relationType must be a non-empty string`);
     }
     return {
       ...(relation.id ? { id: relation.id.trim() } : {}),
@@ -151,31 +151,31 @@ async function readDocuments(input, cwd) {
     .sort((left, right) => left.localeCompare(right));
 
   if (markdownFiles.length === 0) {
-    throw new FrontmatterError(`No Markdown files matched "${input}"`);
+    throw new FlowmatterError(`No Markdown files matched "${input}"`);
   }
 
   const documents = await Promise.all(markdownFiles.map(async (sourcePath) => {
     const relativePath = toPosix(path.relative(baseDir, sourcePath));
     if (relativePath === ".." || relativePath.startsWith("../")) {
-      throw new FrontmatterError(`${sourcePath}: matched file is outside the input root`);
+      throw new FlowmatterError(`${sourcePath}: matched file is outside the input root`);
     }
 
     let parsed;
     try {
       parsed = matter(await readFile(sourcePath, "utf8"));
     } catch (error) {
-      throw new FrontmatterError(`${relativePath}: invalid frontmatter (${error.message})`);
+      throw new FlowmatterError(`${relativePath}: invalid frontmatter (${error.message})`);
     }
 
     if (!isObject(parsed.data)) {
-      throw new FrontmatterError(`${relativePath}: frontmatter must be an object`);
+      throw new FlowmatterError(`${relativePath}: frontmatter must be an object`);
     }
 
     const fallbackId = relativePath.replace(/\.md$/i, "");
     const id = parsed.data.id ?? fallbackId;
     const title = parsed.data.title ?? titleFromContent(parsed.content, path.posix.basename(fallbackId));
-    if (!isNonEmptyString(id)) throw new FrontmatterError(`${relativePath}: "id" must be a non-empty string`);
-    if (!isNonEmptyString(title)) throw new FrontmatterError(`${relativePath}: "title" must be a non-empty string`);
+    if (!isNonEmptyString(id)) throw new FlowmatterError(`${relativePath}: "id" must be a non-empty string`);
+    if (!isNonEmptyString(title)) throw new FlowmatterError(`${relativePath}: "title" must be a non-empty string`);
 
     return {
       id: id.trim(),
@@ -198,7 +198,7 @@ function compile(documents, title) {
 
   for (const document of documents) {
     if (byId.has(document.id)) {
-      throw new FrontmatterError(
+      throw new FlowmatterError(
         `${document.relativePath}: duplicate document id "${document.id}" (also used by ${byId.get(document.id).relativePath})`,
       );
     }
@@ -209,7 +209,7 @@ function compile(documents, title) {
       existing.name !== document.module.name
       || (existing.type && document.module.type && existing.type !== document.module.type)
     )) {
-      throw new FrontmatterError(`${document.relativePath}: module "${document.module.id}" conflicts with an earlier definition`);
+      throw new FlowmatterError(`${document.relativePath}: module "${document.module.id}" conflicts with an earlier definition`);
     }
     if (!existing) modules.set(document.module.id, { ...document.module, submodules: [] });
     if (existing && !existing.type && document.module.type) existing.type = document.module.type;
@@ -221,11 +221,11 @@ function compile(documents, title) {
     document.relations.forEach((relation, index) => {
       const target = byId.get(relation.to);
       if (!target) {
-        throw new FrontmatterError(`${document.relativePath}: relation target "${relation.to}" does not exist`);
+        throw new FlowmatterError(`${document.relativePath}: relation target "${relation.to}" does not exist`);
       }
       const id = relation.id ?? `${document.id}:${index + 1}`;
       if (flowIds.has(id)) {
-        throw new FrontmatterError(`${document.relativePath}: duplicate relation id "${id}" (also used by ${flowIds.get(id)})`);
+        throw new FlowmatterError(`${document.relativePath}: duplicate relation id "${id}" (also used by ${flowIds.get(id)})`);
       }
       flowIds.set(id, document.relativePath);
       flows.push({
@@ -247,7 +247,7 @@ function compile(documents, title) {
   const validation = validateFlow(flow);
   if (!validation.valid) {
     const diagnostics = validation.errors.map((error) => error.message ?? String(error)).join("; ");
-    throw new FrontmatterError(`Generated flow is invalid: ${diagnostics}`);
+    throw new FlowmatterError(`Generated flow is invalid: ${diagnostics}`);
   }
   return { byId, flow };
 }
@@ -319,19 +319,19 @@ function renderPage(document, documents, byId, flowPath) {
 
 export async function buildSite({
   input,
-  outputDir = "frontmatter-dist",
+  outputDir = "flowmatter-dist",
   flowFile = "flow.html",
   title,
   force = false,
   cwd = process.cwd(),
 } = {}) {
-  if (!isNonEmptyString(input)) throw new FrontmatterError("A folder or glob input is required");
-  if (!isNonEmptyString(outputDir)) throw new FrontmatterError("The output directory must be a non-empty string");
+  if (!isNonEmptyString(input)) throw new FlowmatterError("A folder or glob input is required");
+  if (!isNonEmptyString(outputDir)) throw new FlowmatterError("The output directory must be a non-empty string");
   if (!isNonEmptyString(flowFile) || path.basename(flowFile) !== flowFile || !/\.html?$/i.test(flowFile)) {
-    throw new FrontmatterError("The flow filename must be an HTML filename without a directory");
+    throw new FlowmatterError("The flow filename must be an HTML filename without a directory");
   }
   if (title !== undefined && !isNonEmptyString(title)) {
-    throw new FrontmatterError("The title must be a non-empty string");
+    throw new FlowmatterError("The title must be a non-empty string");
   }
 
   const { baseDir, documents } = await readDocuments(input, path.resolve(cwd));
@@ -340,7 +340,7 @@ export async function buildSite({
   for (const document of documents) {
     document.outputPath = path.join(outputRoot, document.outputRelativePath);
     if (path.resolve(document.outputPath) === path.resolve(flowPath)) {
-      throw new FrontmatterError(`${document.relativePath}: rendered page conflicts with ${flowFile}`);
+      throw new FlowmatterError(`${document.relativePath}: rendered page conflicts with ${flowFile}`);
     }
   }
 
@@ -357,7 +357,7 @@ export async function buildSite({
   if (!force) {
     for (const output of outputs) {
       if (await pathExists(output.path)) {
-        throw new FrontmatterError(`${output.path} already exists; use --force to overwrite generated files`);
+        throw new FlowmatterError(`${output.path} already exists; use --force to overwrite generated files`);
       }
     }
   }

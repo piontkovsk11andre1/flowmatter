@@ -5,13 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { buildSite, FrontmatterError } from "../src/index.mjs";
+import { buildSite, FlowmatterError } from "../src/index.mjs";
 
 const execFileAsync = promisify(execFile);
-const cliPath = path.resolve("bin/frontmatter.mjs");
+const cliPath = path.resolve("bin/flowmatter.mjs");
 
 async function workspace() {
-  return mkdtemp(path.join(os.tmpdir(), "frontmatter-test-"));
+  return mkdtemp(path.join(os.tmpdir(), "flowmatter-test-"));
 }
 
 async function put(root, relativePath, content) {
@@ -98,7 +98,7 @@ Source
 
   await assert.rejects(
     buildSite({ input: "docs", outputDir: "site", cwd }),
-    (error) => error instanceof FrontmatterError
+    (error) => error instanceof FlowmatterError
       && error.message === 'source.md: relation target "absent" does not exist',
   );
 });

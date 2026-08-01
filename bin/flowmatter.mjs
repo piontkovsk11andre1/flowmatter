@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-import { buildSite, FrontmatterError } from "../src/index.mjs";
+import { buildSite, FlowmatterError } from "../src/index.mjs";
 
-const HELP = `Usage: frontmatter <folder-or-glob> [options]
+const HELP = `Usage: flowmatter <folder-or-glob> [options]
 
 Generate a flowjob map and standalone HTML pages from Markdown files.
 
 Options:
-  -o, --output <directory>  Output directory (default: frontmatter-dist)
+  -o, --output <directory>  Output directory (default: flowmatter-dist)
   --flow <filename>         Flow HTML filename (default: flow.html)
   --title <title>           Override the flow title
   -f, --force               Overwrite generated files
@@ -69,7 +69,7 @@ if (args.includes("-h") || args.includes("--help")) {
       `Generated ${result.pageCount} page${result.pageCount === 1 ? "" : "s"} and ${result.flowPath}`,
     );
   } catch (error) {
-    if (error instanceof FrontmatterError) {
+    if (error instanceof FlowmatterError) {
       fail(error.message, 1);
     } else if (error instanceof Error) {
       fail(error.message);
