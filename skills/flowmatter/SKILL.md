@@ -15,6 +15,8 @@ render one interactive flowjob map plus linked standalone HTML pages.
 
 ## Workflow
 
+When connected over MCP, discover tools and use `query` or `validate` against the server's configured documents. Read `flowmatter://schema` for field definitions and `flowmatter://example` for a worked example. With HTTP access instead, use `flowmatter call query --url <base-url> --args '{"from":"<id>"}'`; the paths returned belong to the server.
+
 To find which documents reference a known document ID, use `flowmatter query docs --from <id> --direction incoming --depth 1 --limit 20 --json`. Inspect the returned edges for the reason each node was selected, then read the relevant Markdown paths relative to `baseDir`. Filter by `--relation <type>` or increase depth when needed. Check `truncated` before assuming the result is complete.
 
 1. Confirm the CLI is available with `flowmatter --version`. If it is not

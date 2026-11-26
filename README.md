@@ -162,6 +162,25 @@ flowmatter query docs --from payment-service --direction incoming --relation use
 
 ## Agent discovery
 
+### HTTP and MCP
+
+Run `flowmatter api docs --mcp` to serve the graph on `http://127.0.0.1:4174`. The input paths or quoted globs belong to the server and are resolved on each operation. Discover tools with `GET /tools`; call one with `POST /tools/<name>` and a JSON argument object. Success responses contain `result`. The CLI can call the same service:
+
+```sh
+flowmatter call validate --url http://127.0.0.1:4174
+flowmatter call query --url http://127.0.0.1:4174 --args '{"from":"payment-service","direction":"incoming"}'
+```
+
+For MCP, choose the transport supported by your client:
+
+| Transport | Configuration |
+| --- | --- |
+| Local stdio | Launch `flowmatter mcp /absolute/path/to/docs`. |
+| Native Streamable HTTP | Connect to `http://127.0.0.1:4174/mcp` after starting `api` with `--mcp`. |
+| Stdio proxy to HTTP | Launch `flowmatter mcp --url http://127.0.0.1:4174`. The proxy uses the HTTP API and never falls back to local files. |
+
+All three offer `query`, `validate`, `schema`, `example`, and `skill`. The last three are also MCP resources (`flowmatter://schema`, `flowmatter://example`, `flowmatter://skill`). Set `--output <directory>` at server startup to enable the `build` tool; existing outputs are protected against overwrites. The API binds only to loopback. `flowmatter serve` remains the separate HTML preview.
+
 Agents can inspect the supported frontmatter, retrieve a complete multi-file
 example, and validate their work without creating output files:
 

@@ -9,6 +9,9 @@ const HELP = `Usage: flowmatter build <path-or-glob>... [options]
        flowmatter query <path-or-glob>... --from <id> [--direction incoming|outgoing|both]
                        [--relation <type>] [--depth <hops>] [--limit <nodes>] [--json]
        flowmatter serve <path-or-glob>... [--port 4173] [--title <title>] [--flow <filename>]
+       flowmatter api <path-or-glob>... [--port 4174] [--mcp] [--output <directory>]
+       flowmatter mcp <path-or-glob>... [--output <directory>] | flowmatter mcp --url <service>
+       flowmatter call <operation> --url <service> [--args <JSON-object>] [--json]
        flowmatter schema
        flowmatter example
        flowmatter skill
@@ -87,6 +90,11 @@ async function main() {
   }
 
   const command = args[0];
+  if (['api', 'mcp', 'call'].includes(command)) {
+    const {runServiceCommand} = await import('../src/service-cli.mjs');
+    await runServiceCommand(command,args.slice(1));
+    return;
+  }
   if (command === 'query') {
     const options = { input: [] };
     for (let i = 1; i < args.length; i++) {
