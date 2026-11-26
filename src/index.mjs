@@ -287,8 +287,8 @@ export async function resolveMarkdownInputs(input, cwd) {
   return {baseDir, markdownFiles};
 }
 
-async function readDocuments(input, cwd) {
-  const {baseDir, markdownFiles} = await resolveMarkdownInputs(input, cwd);
+async function readDocuments(input, cwd, resolvedInputs) {
+  const {baseDir, markdownFiles} = resolvedInputs ?? await resolveMarkdownInputs(input, cwd);
 
   const sources = await Promise.all(markdownFiles.map(async (sourcePath) => {
     const relativePath = toPosix(path.relative(baseDir, sourcePath));
@@ -536,6 +536,7 @@ function renderPage(document, documents, byId) {
 
 export async function renderSite({
   input,
+  resolvedInputs,
   outputDir = "flowmatter-dist",
   flowFile = "flow.html",
   title,
@@ -549,7 +550,7 @@ export async function renderSite({
     throw new FlowmatterError("The title must be a non-empty string");
   }
 
-  const { baseDir, documents, relationTypes, moduleTypes } = await readDocuments(input, path.resolve(cwd));
+  const { baseDir, documents, relationTypes, moduleTypes } = await readDocuments(input, path.resolve(cwd), resolvedInputs);
   const outputRoot = path.resolve(cwd, outputDir);
   const flowPath = path.join(outputRoot, flowFile);
   for (const document of documents) {

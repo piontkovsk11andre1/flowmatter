@@ -7,24 +7,26 @@ import {renderSite, resolveMarkdownInputs} from './index.mjs';
 // work for globs as well as directories on bind-mounted filesystems.
 export async function serveSite({input, cwd = process.cwd(), title, flowFile = 'flow.html', port = 4173,
   interval = 500, log = console.error}) {
-  async function fingerprint() {
-    const {markdownFiles} = await resolveMarkdownInputs(input, cwd);
+  async function fingerprint({markdownFiles}) {
     return JSON.stringify(await Promise.all(markdownFiles.map(async file => {
       const s = await stat(file, {bigint:true});
       return [file, String(s.ino), String(s.size), String(s.ctimeNs), String(s.mtimeNs)];
     })));
   }
-  async function render() {
-    const site = await renderSite({input,cwd,title,flowFile});
+  async function render(resolvedInputs) {
+    const site = await renderSite({resolvedInputs,cwd,title,flowFile});
     return new Map(site.outputs.map(({path:file,content}) => ['/' + path.relative(site.outputDir,file).split(path.sep).join('/'),content]));
   }
-  let seen = await fingerprint(), pages = await render(), stopped = false, timer, lastError;
+  // The fingerprint and rendered pages must describe the same set of files.
+  const initial = await resolveMarkdownInputs(input, cwd);
+  let seen = await fingerprint(initial), pages = await render(initial), stopped = false, timer, lastError;
   async function poll() {
     try {
-      const next = await fingerprint();
+      const inputs = await resolveMarkdownInputs(input, cwd);
+      const next = await fingerprint(inputs);
       if (next !== seen) {
         seen = next;
-        pages = await render(); // Publish the entire new generation together.
+        pages = await render(inputs); // Publish the entire new generation together.
         log(`Rebuilt ${pages.size - 1} pages`);
       }
       lastError = undefined;
