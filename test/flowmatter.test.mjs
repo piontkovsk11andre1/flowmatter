@@ -54,6 +54,7 @@ Charge the card.
 
   assert.equal(result.pageCount, 2);
   assert.equal(result.flow.title, "Checkout");
+  assert.equal(Object.hasOwn(result.flow, "relationTypes"), false);
   assert.deepEqual(result.flow.flows, [{
     id: "capture-call",
     type: "capturePayment()",
@@ -68,10 +69,80 @@ Charge the card.
   const flowPage = await readFile(path.join(cwd, "site/flow.html"), "utf8");
   assert.match(placePage, /href="\.\.\/payments\/capture\.html">Capture payment<\/a>/);
   assert.match(placePage, /href="\.\.\/payments\/capture\.html#details">payment<\/a>/);
-  assert.match(placePage, /href="\.\.\/flow\.html">Open flow<\/a>/);
+  assert.doesNotMatch(placePage, />Open flow<\/a>/);
   assert.match(capturePage, /Reached from/);
   assert.match(capturePage, /Place order/);
   assert.match(flowPage, /Checkout/);
+});
+
+test("a connection can open a mirrored Markdown page without adding a map item", async () => {
+  const cwd = await workspace();
+  await put(cwd, 'docs/items/a.md', '---\nid: a\nrelations:\n  - {to: a, type: retries, viewUrl: "../notes/Retry policy.md"}\n---\n# Task');
+  await put(cwd, 'docs/notes/Retry policy.md', '# Retry policy\n\nKeep the failed attempt.');
+  const site = await buildSite({ cwd, input: 'docs' });
+  assert.equal(site.pageCount, 2);
+  assert.deepEqual(site.flow.modules.flatMap(m => m.submodules.map(s => s.id)), ['a']);
+  assert.equal(site.flow.flows[0].viewUrl, './notes/Retry%20policy.html');
+  assert.match(await readFile(path.join(site.outputDir, 'notes/Retry policy.html'), 'utf8'), /Keep the failed attempt/);
+  const missing = await validateSite({ cwd, input: 'docs/items/a.md' });
+  assert.equal(missing.valid, false);
+  assert.match(missing.errors[0].message, /relations\[0\].viewUrl/);
+});
+
+test("embeds merged declarations in Flowjob data and allows undeclared relation types alongside them", async () => {
+  const cwd = await workspace();
+  await put(cwd, "docs/start.md", `---
+relationTypes:
+  call: {label: Call, color: '#abc'}
+relations:
+  - {to: end, type: invoke, relationType: call}
+  - {to: end, type: notify, relationType: legacy}
+---\n`);
+  await put(cwd, "docs/end.md", `---
+relationTypes:
+  call: {color: '#abc', previewColor: '#11223344'}
+  event: {label: Event}
+---\n`);
+  const { flowPath } = await buildSite({ input: "docs", cwd });
+  const html = await readFile(flowPath, "utf8");
+  const payload = html.match(/^window\.MAP_DATA=(.+);$/m);
+  assert.ok(payload, "Flowjob map payload is present");
+  const data = JSON.parse(payload[1]);
+  assert.deepEqual(data.relationTypes, {
+    call: { label: "Call", color: "#abc", previewColor: "#11223344" }, event: { label: "Event" },
+  });
+  assert.deepEqual(data.flows.map(({ type, relationType }) => [type, relationType]), [["invoke", "call"], ["notify", "legacy"]]);
+});
+
+test("conflicts identify the documents declaring the property, not just the type", async () => {
+  const cwd = await workspace();
+  for (const [name, properties] of [["a", "label: Call"], ["b", "color: '#abc'"], ["c", "color: '#def'"]]) {
+    await put(cwd, `docs/${name}.md`, `---\nrelationTypes:\n  call: {${properties}}\n---\n`);
+  }
+  const { valid, errors: [error] } = await validateSite({ input: "docs", cwd });
+  assert.equal(valid, false);
+  assert.equal(error.code, "conflicting_relation_type");
+  assert.equal(error.path, "c.md");
+  assert.match(error.message, /c\.md: .*call.*\.color.*b\.md/);
+});
+
+test("malformed relation styles report their source and invalid field", async () => {
+  const cwd = await workspace();
+  for (const [value, location] of [
+    ["false", "relationTypes"], ["{call: null}", 'relationTypes["call"]'],
+    ["[null]", "relationTypes[0]"], ["[{label: Call}]", "relationTypes[0].id"],
+    ["[{id: 123}]", "relationTypes[0].id"], ["[{id: call, color: red}]", "relationTypes[0].color"],
+    ['{" ": {}}', 'relationTypes[" "]'], ['{call: {label: " "}}', '.label'],
+    ["{call: {color: 123}}", '.color'], ["{call: {previewColor: '#abcdef;display:none'}}", '.previewColor'],
+    ["{call: {colour: '#abc'}}", '.colour'],
+  ]) {
+    await put(cwd, "docs/page.md", `---\nrelationTypes: ${value}\n---\n`);
+    const { valid, errors: [error] } = await validateSite({ input: "docs", cwd });
+    assert.equal(valid, false, value);
+    assert.equal(error.code, "invalid_relation_types");
+    assert.equal(error.path, "page.md");
+    assert.ok(error.message.includes(location), error.message);
+  }
 });
 
 test("uses the glob root for mirrored paths and the default title", async () => {
@@ -84,6 +155,36 @@ test("uses the glob root for mirrored paths and the default title", async () => 
   assert.deepEqual(result.pages, [path.join(cwd, "site/intro.html")]);
   assert.equal(result.flow.modules[0].id, "root");
   assert.equal(result.flow.modules[0].submodules[0].id, "intro");
+});
+
+test("overlapping files, directories and globs share one root and config palette", async () => {
+  const cwd = await workspace();
+  const input = ["book/steps/*.md", "book/flow.md", "book/steps", "book/steps/start.md"];
+  await put(cwd, "book/flow.md", `---
+flowmatter: config
+relationTypes:
+  - {id: notify, label: Notify}
+  - {id: call, color: '#123'}
+---\n`);
+  await put(cwd, "book/steps/start.md", `---
+relationTypes: {call: {label: Call}}
+relations: [{to: steps/end, type: invoke, relationType: call}]
+---\n`);
+  await put(cwd, "book/steps/end.md", "# End\n");
+  const { flow, pages } = await buildSite({ cwd, input });
+  assert.equal(flow.title, "Book");
+  assert.deepEqual(Object.keys(flow.relationTypes), ["notify", "call"]);
+  assert.deepEqual(flow.relationTypes.call, { label: "Call", color: "#123" });
+  assert.deepEqual(flow.modules.map(m => m.id), ["steps"]);
+  assert.deepEqual(pages.map(p => path.relative(cwd, p)), ["flowmatter-dist/steps/end.html", "flowmatter-dist/steps/start.html"].map(path.normalize));
+  const { stdout } = await execFileAsync(process.execPath, [cliPath, "validate", ...input, "--json"], { cwd });
+  assert.deepEqual(JSON.parse(stdout).stats, { files: 2, modules: 1, relations: 1 });
+
+  await put(cwd, "book/steps/end.md", "---\nrelationTypes: {call: {color: '#456'}}\n---\n");
+  const { errors: [error] } = await validateSite({ cwd, input });
+  assert.equal(error.code, "conflicting_relation_type");
+  assert.equal(error.path, "steps/end.md");
+  assert.match(error.message, /call.*color.*flow\.md/);
 });
 
 test("fails before writing when a relation target is missing", async () => {
@@ -168,8 +269,8 @@ test("prints the bundled Agent Skill without decoration", async () => {
 
   assert.equal(result.stderr, "");
   assert.match(result.stdout, /^---\nname: flowmatter\n/);
-  assert.match(result.stdout, /flowmatter validate <folder-or-glob> --json/);
-  assert.match(result.stdout, /flowmatter build <folder-or-glob>/);
+  assert.match(result.stdout, /flowmatter validate <path-or-glob>\.\.\. --json/);
+  assert.match(result.stdout, /flowmatter build <path-or-glob>/);
 });
 
 test("validates through the library without writing output", async () => {

@@ -1,6 +1,6 @@
 # flowmatter
 
-`flowmatter` turns a folder or glob of Markdown files into one interactive
+`flowmatter` turns Markdown files selected by path, folder, or glob into one interactive
 [flowjob](https://github.com/piontkovsk11andre1/flowjob) map and a mirrored tree
 of linked, standalone HTML pages.
 
@@ -16,7 +16,7 @@ npm install @p10i/flowmatter
 
 ## Markdown schema
 
-Each Markdown file is a flowjob submodule. Its frontmatter defines its stable
+Each non-config Markdown file is a flowjob submodule. Its frontmatter defines its stable
 identity, parent module, and outgoing relations:
 
 ```markdown
@@ -43,6 +43,30 @@ Validate the order and request payment.
 flow label. `relations[].id` and `relations[].relationType` are optional; an
 omitted relation ID is generated as `<document-id>:<one-based-index>`.
 
+To give a connection its own **View** page, set `viewUrl: ../notes/retry-policy.md` on the relation. The path is relative to the declaring document; include the target in the build inputs. A referenced plain Markdown file needs no frontmatter: it renders once in the output directory without becoming a graph item. Multiple connections can share the page.
+
+Any input document can define map-wide styles in its frontmatter:
+
+```yaml
+relationTypes:
+  call: { label: Call, color: "#1565c0" }
+```
+
+A relation with `relationType: call` uses that style; its `type` remains the individual connection label. Definitions merge by type and property across documents. Identical values are allowed, and conflicting values report both paths. An undeclared type keeps the default style. Optional `color` and `previewColor` accept quoted hex colors (3, 4, 6 or 8 digits).
+
+For a shared palette, include a Markdown file such as `styles.md`:
+
+```yaml
+---
+flowmatter: config
+relationTypes:
+  - { id: call, label: Call, color: "#1565c0" }
+  - { id: event, label: Event, color: "#c60" }
+---
+```
+
+Either declaration form works in ordinary documents and config files. Lists are read in declaration order. A config contributes only definitions: it has no node, page, or target ID. Include at least one ordinary document.
+
 The following values are inferred when omitted:
 
 | Field | Default |
@@ -61,6 +85,24 @@ module: Orders
 
 ## CLI
 
+### Preview while editing
+
+`flowmatter serve docs --port 4173` serves the map at `http://127.0.0.1:4173/` and watches the same files, directories and quoted globs accepted by `build`. Refresh the browser after editing. New and removed pages are reflected together with the rebuilt map. Invalid edits are reported in the terminal; after startup, the last successful preview stays available until the inputs are valid again. The preview is in memory. Use `build` to write a distributable site, and Ctrl+C to stop serving.
+
+### Module colors
+
+A module can open its own documentation: set `module: {name: Orders, viewUrl: ./Overview.md}` on any one of its items. Include the overview in the build inputs. Plain Markdown overviews render as pages without becoming map items. Declarations for the same module must resolve to the same page.
+
+Use `module.type` to select a graph card palette. The definition can live on the same page or in a shared config document. Like `relationTypes`, `moduleTypes` accepts a mapping or a list and merges declarations across pages.
+
+```yaml
+module: {name: Orders, type: domain}
+moduleTypes:
+  domain: {accent: '#287768', headerBg: '#D9F0EA', headerFg: '#123D36'}
+```
+
+Dark mode derives the card tint from `accent`.
+
 Build every Markdown file under a directory:
 
 ```sh
@@ -76,17 +118,20 @@ flowmatter "docs/**/*.md" --output site --title "Order processing"
 The explicit `build` command is equivalent and is preferable in automation:
 
 ```sh
-flowmatter build "docs/**/*.md" --output site --title "Order processing"
+flowmatter build styles.md "docs/**/*.md" --output site --title "Order processing"
 ```
 
 The default output directory is `flowmatter-dist`. It contains `flow.html`
-and one `.html` page per source file with the same relative path. Existing
+and one `.html` page per non-config document. Each input must match Markdown;
+overlapping paths are processed once. Mirrored paths, inferred IDs, and the
+default title use the common ancestor of the input roots (a file's parent,
+the selected directory, or the directory before a glob's first wildcard). Existing
 generated files are not overwritten unless `--force` is passed.
 
 ```text
-Usage: flowmatter build <folder-or-glob> [options]
-       flowmatter <folder-or-glob> [options]
-       flowmatter validate <folder-or-glob> [--json]
+Usage: flowmatter build <path-or-glob>... [options]
+       flowmatter <path-or-glob>... [options]
+       flowmatter validate <path-or-glob>... [--json]
        flowmatter schema
        flowmatter example
        flowmatter skill
@@ -157,11 +202,12 @@ generate Markdown, run JSON validation until it succeeds, then build.
 ```js
 import { buildSite, validateSite } from "@p10i/flowmatter";
 
-const validation = await validateSite({ input: "docs/**/*.md" });
+const input = ["styles.md", "docs/**/*.md"]; // A single string also works.
+const validation = await validateSite({ input });
 if (!validation.valid) console.error(validation.errors);
 
 const result = await buildSite({
-  input: "docs/**/*.md",
+  input,
   outputDir: "site",
   title: "Order processing",
 });

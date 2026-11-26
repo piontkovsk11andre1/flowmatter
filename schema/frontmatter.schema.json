@@ -5,6 +5,10 @@
   "description": "Frontmatter fields supported by one Flowmatter Markdown document.",
   "type": "object",
   "properties": {
+    "flowmatter": {
+      "const": "config",
+      "description": "Contribute global relation types without creating a document node or HTML page."
+    },
     "id": {
       "type": "string",
       "pattern": "\\S",
@@ -27,9 +31,36 @@
           "properties": {
             "id": { "type": "string", "pattern": "\\S" },
             "name": { "type": "string", "pattern": "\\S" },
+            "viewUrl": { "type": "string", "description": "Local path to a selected Markdown overview, relative to this source file." },
             "type": { "type": "string", "pattern": "\\S" }
           },
           "additionalProperties": true
+        }
+      ]
+    },
+    "moduleTypes": {
+      "description": "Map-wide module styles selected by module.type.",
+      "oneOf": [
+        { "type": "object", "propertyNames": { "$ref": "#/$defs/typeId" }, "additionalProperties": { "$ref": "#/$defs/moduleStyle", "unevaluatedProperties": false } },
+        { "type": "array", "items": { "$ref": "#/$defs/moduleStyle", "properties": { "id": { "$ref": "#/$defs/typeId" } }, "required": ["id"], "unevaluatedProperties": false } }
+      ]
+    },
+    "relationTypes": {
+      "description": "Map-wide styles in a keyed mapping or an ordered list. Repeated IDs merge by property; conflicting values are errors.",
+      "oneOf": [
+        {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/typeId" },
+          "additionalProperties": { "$ref": "#/$defs/style", "unevaluatedProperties": false }
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/style",
+            "properties": { "id": { "$ref": "#/$defs/typeId" } },
+            "required": ["id"],
+            "unevaluatedProperties": false
+          }
         }
       ]
     },
@@ -59,10 +90,40 @@
             "type": "string",
             "pattern": "\\S",
             "description": "Optional flowjob relation styling/filter key."
+          },
+          "viewUrl": {
+            "type": "string",
+            "pattern": "^(?!/)[^\\\\:\\u0000-\\u001f]*\\.(?:[mM][dD]|html)$",
+            "description": "Local path relative to this Markdown file. Select an included .md file or its generated .html path; write literal filenames, not URL-encoded segments. A referenced file without Flowmatter document fields renders only as a page."
           }
         },
         "additionalProperties": true
       }
+    }
+  },
+  "$defs": {
+    "typeId": { "type": "string", "pattern": "^\\S(?:[\\s\\S]*\\S)?$" },
+    "moduleStyle": {
+      "type": "object",
+      "properties": {
+        "label": {"type":"string","pattern":"\\S"},
+        "accent": {"$ref":"#/$defs/hexColor"}, "surface": {"$ref":"#/$defs/hexColor"},
+        "headerBg": {"$ref":"#/$defs/hexColor"}, "headerFg": {"$ref":"#/$defs/hexColor"}, "footerFg": {"$ref":"#/$defs/hexColor"}
+      }
+    },
+    "style": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string", "pattern": "\\S" },
+        "hint": { "type": "string", "pattern": "\\S", "description": "Short description shown under the connection filter label." },
+        "color": { "$ref": "#/$defs/hexColor" },
+        "previewColor": { "$ref": "#/$defs/hexColor" }
+      }
+    },
+    "hexColor": {
+      "type": "string",
+      "description": "CSS hex color; quote it in YAML so # does not start a comment.",
+      "pattern": "^#(?:[0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
     }
   },
   "additionalProperties": true

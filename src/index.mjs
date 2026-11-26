@@ -7,28 +7,31 @@ import matter from "gray-matter";
 import { marked } from "marked";
 
 const PAGE_STYLE = `
-:root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; line-height: 1.6; }
-body { margin: 0; background: #f4f1ea; color: #27241f; }
-main { width: min(52rem, calc(100% - 2rem)); margin: 0 auto; padding: 3rem 0 5rem; }
-header { border-bottom: 1px solid #c9c1b3; margin-bottom: 2rem; padding-bottom: 1.25rem; }
-h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; line-height: 1.15; }
-h1 { font-size: clamp(2.2rem, 7vw, 4.5rem); letter-spacing: -.04em; margin: .25rem 0; }
-a { color: #9a3f22; text-underline-offset: .18em; }
-.eyebrow { color: #70685d; font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-.relations { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 2.5rem 0; }
-.relation-card { background: #fffaf0; border: 1px solid #d8cebd; border-radius: .35rem; padding: 1rem 1.2rem; }
-.relation-card h2 { font-size: 1rem; margin: 0 0 .65rem; }
-.relation-card ul { margin: 0; padding-left: 1.2rem; }
+:root { color-scheme: light dark; font-family: Aptos, "Segoe UI Variable", "Segoe UI", sans-serif; line-height: 1.55;
+  --surface: #fcfeff; --text: #142236; --muted: #58708f; --border: #b9cde9; --tint: #e7f0ff; --link: #1855aa; }
+@media (prefers-color-scheme: dark) { :root {
+  --surface: #0a121f; --text: #e8f1ff; --muted: #9ab2d5; --border: #294266; --tint: #111d32; --link: #8ab9ff; } }
+body { margin: 0; background: var(--surface); color: var(--text); }
+main { box-sizing: border-box; width: 100%; min-height: 100vh; margin: 0; padding: calc(.5rem + 5px) calc(.75rem + 5px); overflow-wrap: anywhere; }
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: clamp(1.5rem, 4vw, 2rem); margin: .5em 0; }
+a { color: var(--link); text-underline-offset: .18em; }
+a:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.eyebrow, .relations { font-size: .875rem; }
+.eyebrow { color: var(--muted); font-weight: 600; }
+.relations { border-top: 1px solid var(--border); margin-top: 2rem; padding-top: .75rem; }
+.relations small, article :not(pre) > code { border-radius: .35rem; padding: .1em .4em; background: var(--tint); }
+.relations small { color: var(--muted); }
+.relations section { margin: .4rem 0; }
+.relations h2 { font-size: inherit; margin: 0; }
+.relations ul { margin: .15rem 0; padding-left: 1.25rem; }
 article img { height: auto; max-width: 100%; }
-article pre { overflow-x: auto; padding: 1rem; background: #25231f; color: #f9f3e8; }
+article pre { overflow-x: auto; padding: .75rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--tint); }
+article table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+article th, article td { border: 1px solid var(--border); text-align: start; padding: .35rem .6rem; }
+article th { background: var(--tint); }
+article blockquote { margin-inline: 0; padding-inline: 1rem; border-inline-start: 3px solid var(--border); color: var(--muted); }
 article code { font-family: "SFMono-Regular", Consolas, monospace; }
-@media (prefers-color-scheme: dark) {
-  body { background: #1d1b18; color: #eee7db; }
-  header { border-color: #4b453c; }
-  a { color: #ef9b7c; }
-  .eyebrow { color: #aaa195; }
-  .relation-card { background: #292620; border-color: #514a40; }
-}
 `;
 
 export class FlowmatterError extends Error {
@@ -100,6 +103,49 @@ function describeModule(value, relativePath) {
   return { id: id.trim(), name: name.trim(), ...(value.type ? { type: value.type.trim() } : {}) };
 }
 
+function mergeTypes(types, source, fieldName) {
+  const { relativePath } = source;
+  const relationTypes = source[fieldName];
+  const modules = fieldName === 'moduleTypes';
+  if (relationTypes === undefined) return;
+  const isMapping = (value) => isObject(value) && Object.getPrototypeOf(value) === Object.prototype;
+  const invalid = (message) => {
+    throw new FlowmatterError(`${relativePath}: ${message}`, { code: modules ? 'invalid_module_types' : 'invalid_relation_types', path: relativePath });
+  };
+  const list = Array.isArray(relationTypes);
+  if (!list && !isMapping(relationTypes)) invalid(`${fieldName} must be a mapping or a list of definitions`);
+
+  for (const [index, definition] of Object.entries(relationTypes)) {
+    const location = `${fieldName}[${list ? index : JSON.stringify(index)}]`;
+    if (!isMapping(definition)) invalid(`${location} must be an object`);
+    const key = list ? definition.id : index;
+    if (!isNonEmptyString(key) || key !== key.trim()) invalid(`${location}${list ? '.id' : ''} needs a non-empty ID without surrounding whitespace`);
+    if (!types.has(key)) types.set(key, { style: {}, sources: new Map() });
+    const { style, sources } = types.get(key);
+    for (const [field, value] of Object.entries(definition)) {
+      if (list && field === "id") continue;
+      if (field === "label" || (!modules && field === "hint")) {
+        if (!isNonEmptyString(value)) invalid(`${location}.${field} must be a non-empty string`);
+      } else if ((modules ? ['accent','surface','headerBg','headerFg','footerFg'] : ['color','previewColor']).includes(field)) {
+        if (typeof value !== "string" || !/^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.test(value)) {
+          invalid(`${location}.${field} must be a hex color with 3, 4, 6, or 8 digits`);
+        }
+      } else {
+        invalid(`${location}.${field} is not a supported property`);
+      }
+      if (sources.has(field) && style[field] !== value) {
+        throw new FlowmatterError(`${relativePath}: ${location}.${field} (${key}) conflicts with the declaration in ${sources.get(field)}`, {
+          code: modules ? 'conflicting_module_type' : 'conflicting_relation_type', path: relativePath,
+        });
+      }
+      if (!sources.has(field)) {
+        style[field] = value;
+        sources.set(field, relativePath);
+      }
+    }
+  }
+}
+
 function parseRelations(value, relativePath) {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
@@ -133,9 +179,61 @@ function parseRelations(value, relativePath) {
       ...(relation.id ? { id: relation.id.trim() } : {}),
       to: relation.to.trim(),
       type: relation.type.trim(),
+      ...(relation.viewUrl !== undefined ? { viewPath: relation.viewUrl } : {}),
       ...(relation.relationType ? { relationType: relation.relationType.trim() } : {}),
     };
   });
+}
+
+function pageUrl(relativePath) {
+  return `./${relativePath.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function resolveRelationViews(sources) {
+  const bySource = new Map(sources.map(source => [source.relativePath, source]));
+  const byPage = new Map();
+  for (const source of sources) {
+    if (source.config) continue;
+    const page = source.outputRelativePath;
+    if (byPage.has(page)) {
+      throw new FlowmatterError(`${source.relativePath} and ${byPage.get(page).relativePath} both render to ${page}`, {
+        code: "output_collision", path: source.relativePath,
+      });
+    }
+    byPage.set(page, source);
+  }
+  for (const [page, source] of byPage) {
+    for (let dir = path.posix.dirname(page); dir !== "."; dir = path.posix.dirname(dir)) {
+      if (byPage.has(dir)) throw new FlowmatterError(`${source.relativePath}: output directory ${dir} conflicts with the page for ${byPage.get(dir).relativePath}`, {
+        code: "output_collision", path: source.relativePath,
+      });
+    }
+    function resolveView(ref, field, code) {
+      if (ref === undefined) return;
+      const fail = message => {
+        throw new FlowmatterError(`${source.relativePath}: ${field} ${message}`, {
+          code, path: source.relativePath,
+        });
+      };
+      if (!isNonEmptyString(ref) || ref.startsWith("/") || /[\\:\x00-\x1f]/.test(ref) || !/\.(?:[mM][dD]|html)$/.test(ref)) {
+        fail("must be a local relative .md path or generated .html path");
+      }
+      const key = path.posix.join(path.posix.dirname(source.relativePath), ref);
+      if (key.startsWith("../")) fail(`points outside the input root: ${ref}`);
+      const target = /\.md$/i.test(ref) ? bySource.get(key) : byPage.get(key);
+      if (!target) fail(`does not match a page in the selected inputs: ${ref}`);
+      if (target.config) fail(`references a configuration file: ${ref}`);
+      if (/[\\:\x00-\x1f]/.test(target.outputRelativePath)) fail(`references a path Flowjob cannot display: ${key}`);
+      if (!target.explicitGraph) target.pageOnly = true;
+      return pageUrl(target.outputRelativePath);
+    }
+    if (source.moduleViewPath !== undefined) {
+      source.module.viewUrl = resolveView(source.moduleViewPath, 'module.viewUrl', 'invalid_module_view_url');
+    }
+    source.relations.forEach((relation, index) => {
+      if (relation.viewPath !== undefined) relation.viewUrl = resolveView(relation.viewPath, `relations[${index}].viewUrl`, 'invalid_relation_view_url');
+    });
+  }
 }
 
 async function pathExists(filePath) {
@@ -167,17 +265,32 @@ async function resolveInput(input, cwd) {
   return { baseDir, files };
 }
 
-async function readDocuments(input, cwd) {
-  const { baseDir, files } = await resolveInput(input, cwd);
-  const markdownFiles = [...new Set(files.map((file) => path.resolve(file)))]
-    .filter((file) => /\.md$/i.test(file))
-    .sort((left, right) => left.localeCompare(right));
-
-  if (markdownFiles.length === 0) {
-    throw new FlowmatterError(`No Markdown files matched "${input}"`, { code: "no_markdown_files", path: input });
+export async function resolveMarkdownInputs(input, cwd) {
+  const inputs = Array.isArray(input) ? input : [input];
+  if (!inputs.length || !inputs.every(isNonEmptyString)) throw new FlowmatterError("One or more Markdown paths or globs are required");
+  const files = new Set();
+  let baseDir;
+  for (const spec of new Set(inputs)) {
+    const resolved = await resolveInput(spec, cwd);
+    const matches = resolved.files.filter((file) => /\.md$/i.test(file));
+    if (!matches.length) throw new FlowmatterError(`No Markdown files matched "${spec}"`, { code: "no_markdown_files", path: spec });
+    for (const file of matches) files.add(path.resolve(file));
+    baseDir ??= resolved.baseDir;
+    if (path.parse(baseDir).root !== path.parse(resolved.baseDir).root) throw new FlowmatterError("Inputs must share a filesystem root");
+    while (true) {
+      const relative = path.relative(baseDir, resolved.baseDir);
+      if (relative !== ".." && !relative.startsWith(`..${path.sep}`)) break;
+      baseDir = path.dirname(baseDir);
+    }
   }
+  const markdownFiles = [...files].sort((left, right) => left.localeCompare(right));
+  return {baseDir, markdownFiles};
+}
 
-  const documents = await Promise.all(markdownFiles.map(async (sourcePath) => {
+async function readDocuments(input, cwd) {
+  const {baseDir, markdownFiles} = await resolveMarkdownInputs(input, cwd);
+
+  const sources = await Promise.all(markdownFiles.map(async (sourcePath) => {
     const relativePath = toPosix(path.relative(baseDir, sourcePath));
     if (relativePath === ".." || relativePath.startsWith("../")) {
       throw new FlowmatterError(`${sourcePath}: matched file is outside the input root`, {
@@ -203,6 +316,8 @@ async function readDocuments(input, cwd) {
       });
     }
 
+    if (parsed.data.flowmatter === "config") return { config: true, relativePath, relationTypes: parsed.data.relationTypes, moduleTypes: parsed.data.moduleTypes };
+
     const fallbackId = relativePath.replace(/\.md$/i, "");
     const id = parsed.data.id ?? fallbackId;
     const title = parsed.data.title ?? titleFromContent(parsed.content, path.posix.basename(fallbackId));
@@ -221,8 +336,12 @@ async function readDocuments(input, cwd) {
 
     return {
       id: id.trim(),
+      explicitGraph: ["id", "title", "module", "relations", "relationTypes", "moduleTypes"].some(key => Object.hasOwn(parsed.data, key)),
       title: title.trim(),
       module: describeModule(parsed.data.module, relativePath),
+      moduleViewPath: parsed.data.module?.viewUrl,
+      relationTypes: parsed.data.relationTypes,
+      moduleTypes: parsed.data.moduleTypes,
       relations: parseRelations(parsed.data.relations, relativePath),
       content: parsed.content,
       sourcePath,
@@ -230,15 +349,25 @@ async function readDocuments(input, cwd) {
       outputRelativePath: relativePath.replace(/\.md$/i, ".html"),
     };
   }));
-  return { baseDir, documents };
+  const relationTypes = new Map();
+  const moduleTypes = new Map();
+  for (const source of sources) {
+    mergeTypes(relationTypes, source, 'relationTypes');
+    mergeTypes(moduleTypes, source, 'moduleTypes');
+  }
+  const documents = sources.filter((source) => !source.config);
+  resolveRelationViews(sources);
+  if (!documents.length) throw new FlowmatterError("Inputs contain only configuration; at least one document is required", { code: "no_documents" });
+  return { baseDir, documents, relationTypes, moduleTypes };
 }
 
-function compile(documents, title) {
+function compile(documents, title, relationTypes, moduleTypes) {
   const byId = new Map();
   const modules = new Map();
   const flowIds = new Map();
 
-  for (const document of documents) {
+  const graphDocuments = documents.filter(document => !document.pageOnly);
+  for (const document of graphDocuments) {
     if (byId.has(document.id)) {
       throw new FlowmatterError(
         `${document.relativePath}: duplicate document id "${document.id}" (also used by ${byId.get(document.id).relativePath})`,
@@ -250,6 +379,7 @@ function compile(documents, title) {
     const existing = modules.get(document.module.id);
     if (existing && (
       existing.name !== document.module.name
+      || (existing.viewUrl && document.module.viewUrl && existing.viewUrl !== document.module.viewUrl)
       || (existing.type && document.module.type && existing.type !== document.module.type)
     )) {
       throw new FlowmatterError(`${document.relativePath}: module "${document.module.id}" conflicts with an earlier definition`, {
@@ -259,11 +389,12 @@ function compile(documents, title) {
     }
     if (!existing) modules.set(document.module.id, { ...document.module, submodules: [] });
     if (existing && !existing.type && document.module.type) existing.type = document.module.type;
-    modules.get(document.module.id).submodules.push({ id: document.id, name: document.title });
+    if (existing && !existing.viewUrl && document.module.viewUrl) existing.viewUrl = document.module.viewUrl;
+    modules.get(document.module.id).submodules.push({ id: document.id, name: document.title, viewUrl: pageUrl(document.outputRelativePath) });
   }
 
   const flows = [];
-  for (const document of documents) {
+  for (const document of graphDocuments) {
     document.relations.forEach((relation, index) => {
       const target = byId.get(relation.to);
       if (!target) {
@@ -283,6 +414,7 @@ function compile(documents, title) {
       flows.push({
         id,
         type: relation.type,
+        ...(relation.viewUrl ? { viewUrl: relation.viewUrl } : {}),
         ...(relation.relationType ? { relationType: relation.relationType } : {}),
         from: { module: document.module.id, submodule: document.id },
         to: { module: target.module.id, submodule: target.id },
@@ -294,6 +426,8 @@ function compile(documents, title) {
     schemaVersion: 1,
     title,
     modules: [...modules.values()],
+    ...(moduleTypes.size ? { moduleTypes: Object.fromEntries([...moduleTypes].map(([key,{style}])=>[key,style])) } : {}),
+    ...(relationTypes.size ? { relationTypes: Object.fromEntries([...relationTypes].map(([key, { style }]) => [key, style])) } : {}),
     flows,
   };
   const validation = validateFlow(flow);
@@ -306,13 +440,12 @@ function compile(documents, title) {
 
 export async function validateSite({ input, title, cwd = process.cwd() } = {}) {
   try {
-    if (!isNonEmptyString(input)) throw new FlowmatterError("A folder or glob input is required");
     if (title !== undefined && !isNonEmptyString(title)) {
       throw new FlowmatterError("The title must be a non-empty string");
     }
-    const { baseDir, documents } = await readDocuments(input, path.resolve(cwd));
+    const { baseDir, documents, relationTypes, moduleTypes } = await readDocuments(input, path.resolve(cwd));
     const siteTitle = title?.trim() ?? titleFromContent("", path.basename(baseDir));
-    const { flow } = compile(documents, siteTitle);
+    const { flow } = compile(documents, siteTitle, relationTypes, moduleTypes);
     return {
       valid: true,
       errors: [],
@@ -357,22 +490,24 @@ function renderRelationList(title, relations, currentOutputPath) {
   return `<section class="relation-card"><h2>${escapeHtml(title)}</h2><ul>${items}</ul></section>`;
 }
 
-function renderPage(document, documents, byId, flowPath) {
+function renderPage(document, documents, byId) {
   const outgoing = document.relations.map((relation) => ({ document: byId.get(relation.to), type: relation.type }));
-  const incoming = documents.flatMap((candidate) => candidate.relations
+  const incoming = document.pageOnly ? [] : documents.flatMap((candidate) => candidate.relations
     .filter((relation) => relation.to === document.id)
     .map((relation) => ({ document: candidate, type: relation.type })));
 
   const sourceToOutput = new Map(documents.map((candidate) => [candidate.sourcePath, candidate.outputPath]));
-  const body = marked.parse(document.content, {
-    walkTokens(token) {
+  const tokens = marked.lexer(document.content);
+  const first = tokens.find(token => token.type !== "space");
+  const hasTitle = first?.type === "heading" && first.depth === 1;
+  marked.walkTokens(tokens, token => {
       if (token.type !== "link" || !isNonEmptyString(token.href)) return;
       const match = token.href.match(/^([^?#]+\.md)([?#].*)?$/i);
       if (!match || path.isAbsolute(match[1])) return;
       const targetOutput = sourceToOutput.get(path.resolve(path.dirname(document.sourcePath), match[1]));
       if (targetOutput) token.href = `${relativeHref(document.outputPath, targetOutput)}${match[2] ?? ""}`;
-    },
   });
+  const body = marked.parser(tokens);
   const relations = [
     renderRelationList("Leads to", outgoing, document.outputPath),
     renderRelationList("Reached from", incoming, document.outputPath),
@@ -389,26 +524,23 @@ function renderPage(document, documents, byId, flowPath) {
 <body>
   <main>
     <header>
-      <div class="eyebrow">${escapeHtml(document.module.name)} · <a href="${escapeHtml(relativeHref(document.outputPath, flowPath))}">Open flow</a></div>
-      <h1>${escapeHtml(document.title)}</h1>
+      <div class="eyebrow">${escapeHtml(document.module.name)}</div>
     </header>
-    ${relations ? `<aside class="relations" aria-label="Relations">${relations}</aside>` : ""}
-    <article>${body}</article>
+    <article>${hasTitle ? "" : `<h1>${escapeHtml(document.title)}</h1>`}${body}</article>
+    ${relations ? `<footer class="relations" aria-label="Relations">${relations}</footer>` : ""}
   </main>
 </body>
 </html>
 `;
 }
 
-export async function buildSite({
+export async function renderSite({
   input,
   outputDir = "flowmatter-dist",
   flowFile = "flow.html",
   title,
-  force = false,
   cwd = process.cwd(),
 } = {}) {
-  if (!isNonEmptyString(input)) throw new FlowmatterError("A folder or glob input is required");
   if (!isNonEmptyString(outputDir)) throw new FlowmatterError("The output directory must be a non-empty string");
   if (!isNonEmptyString(flowFile) || path.basename(flowFile) !== flowFile || !/\.html?$/i.test(flowFile)) {
     throw new FlowmatterError("The flow filename must be an HTML filename without a directory");
@@ -417,27 +549,34 @@ export async function buildSite({
     throw new FlowmatterError("The title must be a non-empty string");
   }
 
-  const { baseDir, documents } = await readDocuments(input, path.resolve(cwd));
+  const { baseDir, documents, relationTypes, moduleTypes } = await readDocuments(input, path.resolve(cwd));
   const outputRoot = path.resolve(cwd, outputDir);
   const flowPath = path.join(outputRoot, flowFile);
   for (const document of documents) {
     document.outputPath = path.join(outputRoot, document.outputRelativePath);
-    if (path.resolve(document.outputPath) === path.resolve(flowPath)) {
-      throw new FlowmatterError(`${document.relativePath}: rendered page conflicts with ${flowFile}`);
+    if (document.outputRelativePath === flowFile || document.outputRelativePath.startsWith(`${flowFile}/`)) {
+      throw new FlowmatterError(`${document.relativePath}: rendered page conflicts with ${flowFile}`, {
+        code: "output_collision", path: document.relativePath,
+      });
     }
   }
 
   const siteTitle = title?.trim() ?? titleFromContent("", path.basename(baseDir));
-  const { byId, flow } = compile(documents, siteTitle);
+  const { byId, flow } = compile(documents, siteTitle, relationTypes, moduleTypes);
   const outputs = [
     { path: flowPath, content: buildFlow(flow, { title: siteTitle }) },
     ...documents.map((document) => ({
       path: document.outputPath,
-      content: renderPage(document, documents, byId, flowPath),
+      content: renderPage(document, documents, byId),
     })),
   ];
 
-  if (!force) {
+  return {flow, flowPath, outputDir: outputRoot, pageCount: documents.length, pages: documents.map(document => document.outputPath), outputs};
+}
+
+export async function buildSite(options = {}) {
+  const {outputs, ...result} = await renderSite(options);
+  if (!options.force) {
     for (const output of outputs) {
       if (await pathExists(output.path)) {
         throw new FlowmatterError(`${output.path} already exists; use --force to overwrite generated files`);
@@ -450,11 +589,5 @@ export async function buildSite({
     await writeFile(output.path, output.content, "utf8");
   }
 
-  return {
-    flow,
-    flowPath,
-    outputDir: outputRoot,
-    pageCount: documents.length,
-    pages: documents.map((document) => document.outputPath),
-  };
+  return result;
 }

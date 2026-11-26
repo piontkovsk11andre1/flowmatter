@@ -3,9 +3,10 @@
 import { readFile } from "node:fs/promises";
 import { buildSite, FlowmatterError, validateSite } from "../src/index.mjs";
 
-const HELP = `Usage: flowmatter build <folder-or-glob> [options]
-       flowmatter <folder-or-glob> [options]
-       flowmatter validate <folder-or-glob> [--json]
+const HELP = `Usage: flowmatter build <path-or-glob>... [options]
+       flowmatter <path-or-glob>... [options]
+       flowmatter validate <path-or-glob>... [--json]
+       flowmatter serve <path-or-glob>... [--port 4173] [--title <title>] [--flow <filename>]
        flowmatter schema
        flowmatter example
        flowmatter skill
@@ -32,13 +33,17 @@ function takeValue(args, index, option) {
   return value;
 }
 
-function parseInputOptions(args) {
+function parseInputOptions(args, serve = false) {
   const options = { force: false, json: false };
   const inputs = [];
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === "-f" || argument === "--force") {
+    if (serve && argument === '--port') {
+      const raw = takeValue(args,index++,argument);
+      if (!/^\d+$/.test(raw) || Number(raw)>65535) throw new Error('Expected --port 0–65535');
+      options.port = Number(raw);
+    } else if (argument === "-f" || argument === "--force") {
       options.force = true;
     } else if (argument === "--json") {
       options.json = true;
@@ -58,8 +63,8 @@ function parseInputOptions(args) {
     }
   }
 
-  if (inputs.length !== 1) throw new Error("exactly one folder or glob is required");
-  return { input: inputs[0], ...options };
+  if (!inputs.length) throw new Error("at least one Markdown path or glob is required");
+  return { input: inputs, ...options };
 }
 
 async function printBundledJson(relativePath) {
@@ -80,6 +85,15 @@ async function main() {
   }
 
   const command = args[0];
+  if (command === 'serve') {
+    const options = parseInputOptions(args.slice(1),true);
+    if (options.outputDir || options.force || options.json) throw new Error('serve accepts --flow, --title and --port');
+    const {serveSite} = await import('../src/serve.mjs');
+    const preview = await serveSite(options);
+    console.log(`Serving ${preview.url} (watching Markdown; refresh to see changes)`);
+    for (const signal of ['SIGINT','SIGTERM']) process.once(signal,()=>preview.close());
+    return;
+  }
   if (["schema", "example", "skill"].includes(command)) {
     if (args.length !== 1) throw new Error(`${command} does not accept arguments or options`);
     if (command === "skill") {
@@ -103,7 +117,7 @@ async function main() {
       console.log(JSON.stringify(report));
     }
     else if (validation.valid) {
-      console.log(`${parsed.input} is valid (${validation.stats.files} files, ${validation.stats.relations} relations)`);
+      console.log(`Valid: ${parsed.input.join(", ")} (${validation.stats.files} files, ${validation.stats.relations} relations)`);
     } else {
       console.log(validation.errors.map((error) => error.message).join("\n"));
     }
