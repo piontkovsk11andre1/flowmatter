@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 import { readFile } from "node:fs/promises";
-import { buildSite, FlowmatterError, validateSite } from "../src/index.mjs";
+import { buildSite, FlowmatterError, querySite, validateSite } from "../src/index.mjs";
 
 const HELP = `Usage: flowmatter build <path-or-glob>... [options]
        flowmatter <path-or-glob>... [options]
        flowmatter validate <path-or-glob>... [--json]
+       flowmatter query <path-or-glob>... --from <id> [--direction incoming|outgoing|both]
+                       [--relation <type>] [--depth <hops>] [--limit <nodes>] [--json]
        flowmatter serve <path-or-glob>... [--port 4173] [--title <title>] [--flow <filename>]
        flowmatter schema
        flowmatter example
@@ -85,6 +87,23 @@ async function main() {
   }
 
   const command = args[0];
+  if (command === 'query') {
+    const options = { input: [] };
+    for (let i = 1; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === '--json') continue;
+      if (['--from', '--direction', '--relation', '--depth', '--limit'].includes(arg)) {
+        const value = takeValue(args, i++, arg);
+        if (arg === '--depth' || arg === '--limit') {
+          if (!/^\d+$/.test(value)) throw new Error(`${arg} requires an integer`);
+          options[arg.slice(2)] = Number(value);
+        } else options[arg.slice(2)] = value;
+      } else if (arg.startsWith('-')) throw new Error(`unknown query option ${arg}`);
+      else options.input.push(arg);
+    }
+    console.log(JSON.stringify(await querySite(options)));
+    return;
+  }
   if (command === 'serve') {
     const options = parseInputOptions(args.slice(1),true);
     if (options.outputDir || options.force || options.json) throw new Error('serve accepts --flow, --title and --port');

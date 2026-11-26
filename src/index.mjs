@@ -438,6 +438,47 @@ function compile(documents, title, relationTypes, moduleTypes) {
   return { byId, flow };
 }
 
+export async function querySite({ input, cwd = process.cwd(), from, direction = 'outgoing', depth = 1, relation, limit = 100 } = {}) {
+  if (!isNonEmptyString(from)) throw new Error('query requires --from <document-id>');
+  if (!['incoming', 'outgoing', 'both'].includes(direction)) throw new Error('Expected direction incoming, outgoing or both');
+  if (!Number.isSafeInteger(depth) || depth < 0) throw new Error('Expected a non-negative integer depth');
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('Expected a positive integer limit');
+  const { baseDir, documents, relationTypes, moduleTypes } = await readDocuments(input, path.resolve(cwd));
+  const { byId, flow } = compile(documents, 'Query', relationTypes, moduleTypes);
+  if (!byId.has(from)) throw new FlowmatterError(`Unknown document id: ${from}`, { code: 'unknown_document_id' });
+
+  const adjacent = new Map();
+  function add(id, neighbor, edge) {
+    if (!adjacent.has(id)) adjacent.set(id, []);
+    adjacent.get(id).push({ neighbor, edge });
+  }
+  for (const { id, from: source, to: target, type, relationType } of flow.flows) {
+    if (relation !== undefined && relation !== (relationType ?? type)) continue;
+    const edge = { id, from: source.submodule, to: target.submodule, type, ...(relationType ? { relationType } : {}) };
+    if (direction !== 'incoming') add(edge.from, edge.to, edge);
+    if (direction !== 'outgoing') add(edge.to, edge.from, edge);
+  }
+  const queue = [from], distances = new Map([[from, 0]]), edges = new Map();
+  let truncated = false;
+  for (let i = 0; i < queue.length; i++) {
+    const id = queue[i], distance = distances.get(id);
+    if (distance === depth) break;
+    for (const { neighbor, edge } of adjacent.get(id) ?? []) {
+      if (!distances.has(neighbor)) {
+        if (queue.length === limit) { truncated = true; continue; }
+        distances.set(neighbor, distance + 1);
+        queue.push(neighbor);
+      }
+      edges.set(edge.id, edge);
+    }
+  }
+  const nodes = queue.map(id => {
+    const { title, relativePath } = byId.get(id);
+    return { id, title, path: relativePath, distance: distances.get(id) };
+  });
+  return { baseDir, nodes, edges: [...edges.values()], truncated };
+}
+
 export async function validateSite({ input, title, cwd = process.cwd() } = {}) {
   try {
     if (title !== undefined && !isNonEmptyString(title)) {

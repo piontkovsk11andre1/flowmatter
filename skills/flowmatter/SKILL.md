@@ -15,6 +15,8 @@ render one interactive flowjob map plus linked standalone HTML pages.
 
 ## Workflow
 
+To find which documents reference a known document ID, use `flowmatter query docs --from <id> --direction incoming --depth 1 --limit 20 --json`. Inspect the returned edges for the reason each node was selected, then read the relevant Markdown paths relative to `baseDir`. Filter by `--relation <type>` or increase depth when needed. Check `truncated` before assuming the result is complete.
+
 1. Confirm the CLI is available with `flowmatter --version`. If it is not
    installed, use `npx --package @p10i/flowmatter flowmatter` as the command.
 2. Run `flowmatter schema` and inspect the complete frontmatter schema.

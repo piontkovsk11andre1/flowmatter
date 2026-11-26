@@ -150,6 +150,16 @@ Malformed frontmatter, duplicate IDs, conflicting module definitions, missing
 relation targets, invalid generated flow data, and output collisions fail the
 build with a nonzero exit code.
 
+## Query the document graph
+
+```sh
+flowmatter query docs --from payment-service --direction incoming --relation uses --depth 2 --limit 20 --json
+```
+
+`query` reads the same files, directories or quoted globs as `validate` and prints JSON without building HTML. Start at a **document ID**. By default it follows outgoing relations for one hop; use `incoming` to find documents referring to the start, or `both` to walk either way. `--relation` matches `relationType` when present, otherwise `type`.
+
+`nodes` are in breadth-first order, with `id`, `title`, Markdown `path` relative to `baseDir`, and shortest `distance` from the start. `edges` are the matching relations traversed, in their original direction. `--depth 0` returns only the start. `--limit` caps nodes including the start (default 100); `truncated` is true if that limit omitted a reachable node within the requested depth.
+
 ## Agent discovery
 
 Agents can inspect the supported frontmatter, retrieve a complete multi-file

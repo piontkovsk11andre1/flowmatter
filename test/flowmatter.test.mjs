@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { buildSite, FlowmatterError, validateSite } from "../src/index.mjs";
+import { buildSite, FlowmatterError, querySite, validateSite } from "../src/index.mjs";
 
 const execFileAsync = promisify(execFile);
 const cliPath = path.resolve("bin/flowmatter.mjs");
@@ -19,6 +19,26 @@ async function put(root, relativePath, content) {
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, content, "utf8");
 }
+
+test("queries typed incoming relations across a cycle and reports omitted nodes", async () => {
+  const cwd = await workspace();
+  await put(cwd, 'docs/services/a.md', '---\nid: a\nrelations: [{to: b, type: invokes, relationType: uses}]\n---\n# Service A');
+  await put(cwd, 'docs/b.md', '---\nrelations: [{to: a, type: uses}]\n---\n# B');
+  await put(cwd, 'docs/c.md', '---\nrelations: [{to: a, type: uses}, {to: b, type: reads}]\n---\n# C');
+  const options = { cwd, input: 'docs', from: 'b', direction: 'incoming', relation: 'uses', depth: 3 };
+  const { stdout } = await execFileAsync(process.execPath, [cliPath, 'query', 'docs', '--from', 'b', '--direction', 'incoming', '--relation', 'uses', '--depth', '3', '--json'], { cwd });
+  const result = JSON.parse(stdout);
+  assert.deepEqual(result.nodes.map(n => [n.id, n.distance]), [['b', 0], ['a', 1], ['c', 2]]);
+  assert.equal(result.nodes[1].path, 'services/a.md');
+  assert.deepEqual(result.edges.map(e => [e.from, e.to]), [['a', 'b'], ['b', 'a'], ['c', 'a']]);
+  assert.equal(result.truncated, false);
+  const limited = await querySite({ ...options, limit: 2 });
+  assert.equal(limited.nodes.length, 2);
+  assert.equal(limited.truncated, true);
+  assert.ok(limited.edges.every(e => e.from !== 'c'));
+  assert.deepEqual((await querySite({ ...options, depth: 0 })).edges, []);
+  await assert.rejects(querySite({ ...options, from: 'absent' }), { code: 'unknown_document_id' });
+});
 
 test("builds a global flow and mirrored linked pages from a directory", async () => {
   const cwd = await workspace();
