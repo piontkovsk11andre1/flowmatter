@@ -1,6 +1,6 @@
 {
   "name": "@p10i/flowmatter",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Generate flowjob maps and linked HTML pages from Markdown frontmatter.",
   "type": "module",
   "exports": {
@@ -46,7 +46,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@p10i/flowjob": "0.1.2",
+    "@p10i/flowjob": "0.1.4",
     "glob": "13.0.6",
     "glob-parent": "6.0.2",
     "gray-matter": "4.0.3",
